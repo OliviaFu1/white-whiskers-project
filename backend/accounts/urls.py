@@ -1,6 +1,7 @@
 from django.urls import path
-from . import views
+from .views import RegisterView, MeView
 
 urlpatterns = [
-    # add endpoints later
+    path("register/", RegisterView.as_view(), name="register"),
+    path("me/", MeView.as_view(), name="me"),
 ]
