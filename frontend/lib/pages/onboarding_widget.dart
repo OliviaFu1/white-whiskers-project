@@ -7,7 +7,6 @@ class OnboardingStepScaffold extends StatelessWidget {
   final VoidCallback? onBack;
   final bool canNext;
   final VoidCallback? onNext;
-  final VoidCallback? onSkip;
   final String? helperError;
 
   // styling
@@ -28,17 +27,14 @@ class OnboardingStepScaffold extends StatelessWidget {
     required this.muted,
     this.onBack,
     this.onNext,
-    this.onSkip,
     this.helperError,
   });
-  
+
   @override
   Widget build(BuildContext context) {
     final h = MediaQuery.of(context).size.height;
-
-    // Tune these two numbers to match your Figma feel:
-    final titleTop = h * 0.15;   // how high the title sits
-    final titleToField = h * 0.05; // gap before the field block
+    final titleTop = h * 0.15;
+    final titleToField = h * 0.05;
 
     return Scaffold(
       backgroundColor: bg,
@@ -72,7 +68,6 @@ class OnboardingStepScaffold extends StatelessWidget {
 
               SizedBox(height: titleToField),
 
-              // field block centered-ish
               ConstrainedBox(
                 constraints: const BoxConstraints(maxWidth: 320),
                 child: Column(
@@ -85,29 +80,12 @@ class OnboardingStepScaffold extends StatelessWidget {
                         helperError!,
                         style: const TextStyle(color: Colors.red, fontSize: 12),
                       ),
-                    const SizedBox(height: 6),
-                    if (onSkip != null)
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: GestureDetector(
-                          onTap: onSkip,
-                          child: Text(
-                            "Skip",
-                            style: TextStyle(
-                              decoration: TextDecoration.underline,
-                              fontSize: 12,
-                              color: muted,
-                            ),
-                          ),
-                        ),
-                      ),
                   ],
                 ),
               ),
 
               const SizedBox(height: 18),
 
-              // next arrow directly below
               _NextArrowButton(
                 enabled: canNext,
                 accent: accent,

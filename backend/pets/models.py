@@ -19,7 +19,9 @@ class Pet(models.Model):
     breed_text = models.CharField(max_length=100, blank=True)
 
     sex = models.CharField(max_length=10, choices=Sex.choices, default=Sex.UNKNOWN)
+    spayed_neutered = models.BooleanField(null=True, blank=True)
 
+    age_years = models.PositiveSmallIntegerField(null=True, blank=True)
     birthdate = models.DateField(null=True, blank=True)
     date_of_death = models.DateField(null=True, blank=True) # None if still alive
 

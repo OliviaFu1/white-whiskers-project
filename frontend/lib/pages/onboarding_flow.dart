@@ -4,6 +4,8 @@ import 'onboarding_widget.dart';
 import '../services/auth_api.dart';
 import '../services/token_store.dart';
 
+enum AgeInputMode { age, birthdate }
+
 class OnboardingFlow extends StatefulWidget {
   const OnboardingFlow({super.key});
 
@@ -24,16 +26,25 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   final ownerName = TextEditingController();
   final petName = TextEditingController();
 
-  String? sex;
   String? species;
+  String? sex;
+  bool? spayedNeutered;
   final breed = TextEditingController();
 
-  // use a non-null default for wheel stability
-  int ageYears = 0;
+  // Age/Birthdate
+  AgeInputMode? ageMode; // user must pick first
+  int ageYears = 0; // wheel stability
   DateTime? birthDate;
 
+  // touched flags for errors
   bool _ownerTouched = false;
   bool _petTouched = false;
+  bool _speciesTouched = false;
+  bool _sexTouched = false;
+  bool _spayTouched = false;
+  bool _breedTouched = false;
+  bool _ageModeTouched = false;
+  bool _ageValueTouched = false;
 
   // save name on step 0
   bool _savingName = false;
@@ -43,6 +54,34 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
   bool _savingFinal = false;
   String? _finalError;
 
+  // ---------------------------
+  // Validation getters
+  // ---------------------------
+  bool get _ownerValid => ownerName.text.trim().isNotEmpty;
+  bool get _petValid => petName.text.trim().isNotEmpty;
+
+  bool get _speciesValid => species != null;
+  bool get _sexValid => sex != null;
+  bool get _spayedValid => spayedNeutered != null;
+  bool get _breedValid => breed.text.trim().isNotEmpty;
+
+  bool get _ageModeValid => ageMode != null;
+
+  bool get _ageValueValid {
+    if (ageMode == null) return false;
+    if (ageMode == AgeInputMode.age) {
+      return true;
+    } else {
+      return birthDate != null;
+    }
+  }
+
+  String get _petLabel =>
+      petName.text.trim().isEmpty ? "your pet" : petName.text.trim();
+
+  // ---------------------------
+  // Actions
+  // ---------------------------
   Future<void> _saveNameAndNext() async {
     if (_savingName) return;
 
@@ -81,20 +120,15 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       final access = await TokenStore.readAccess();
       if (access == null) throw "No access token found.";
 
-      // create pet
       final petBody = <String, dynamic>{
         "name": petName.text.trim(),
-        // species is required by your model; ensure you send something
-        "species": (species ?? "dog"),
-        // sex has a default in backend, but it's fine to send
-        "sex": (sex ?? "unknown"),
-        // optional fields: only include if non-empty
-        if (breed.text.trim().isNotEmpty) "breed_text": breed.text.trim(),
-        if (birthDate != null)
-          "birthdate": birthDate!
-              .toIso8601String()
-              .split('T')
-              .first, // YYYY-MM-DD
+        "species": species,
+        "sex": sex,
+        "spayed_neutered": spayedNeutered,
+        "breed_text": breed.text.trim(),
+        if (ageMode == AgeInputMode.age) "age_years": ageYears,
+        if (ageMode == AgeInputMode.birthdate && birthDate != null)
+          "birthdate": birthDate!.toIso8601String().split('T').first,
       };
 
       await AuthApi.createPet(accessToken: access, body: petBody);
@@ -137,12 +171,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
     );
   }
 
-  bool get _ownerValid => ownerName.text.trim().isNotEmpty;
-  bool get _petValid => petName.text.trim().isNotEmpty;
-
-  String get _petLabel =>
-      petName.text.trim().isEmpty ? "your pet" : petName.text.trim();
-
   @override
   Widget build(BuildContext context) {
     return PageView(
@@ -157,9 +185,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           onBack: null,
           canNext: _ownerValid,
           onNext: _saveNameAndNext,
-          onSkip: null,
-          helperError:
-              _nameSaveError ??
+          helperError: _nameSaveError ??
               ((_ownerTouched && !_ownerValid) ? "Name is required" : null),
           bg: bg,
           titleColor: titleColor,
@@ -181,10 +207,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           onBack: _back,
           canNext: _petValid,
           onNext: _next,
-          onSkip: null,
-          helperError: (_petTouched && !_petValid)
-              ? "Pet name is required"
-              : null,
+          helperError: (_petTouched && !_petValid) ? "Pet name is required" : null,
           bg: bg,
           titleColor: titleColor,
           accent: accent,
@@ -202,10 +225,10 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           title: "What species is $_petLabel?",
           showBack: true,
           onBack: _back,
-          canNext: true,
+          canNext: _speciesValid,
           onNext: _next,
-          onSkip: null,
-          helperError: null,
+          helperError:
+              (_speciesTouched && !_speciesValid) ? "Species is required" : null,
           bg: bg,
           titleColor: titleColor,
           accent: accent,
@@ -214,53 +237,56 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
             label: "Species",
             value: species,
             lineColor: muted,
-            onChanged: (v) => setState(() => species = v),
+            onChanged: (v) => setState(() {
+              _speciesTouched = true;
+              species = v;
+            }),
             items: const [
               DropdownMenuItem(value: "dog", child: Text("Dog")),
               DropdownMenuItem(value: "cat", child: Text("Cat")),
-              DropdownMenuItem(value: "other", child: Text("Other")),
             ],
           ),
         ),
 
-        // 3) sex (optional)
+        // 3) sex + spayed/neutered (both required)
         OnboardingStepScaffold(
-          title: "Great!\nWhat’s $_petLabel’s sex?",
+          title: "Great!\nTell us about $_petLabel",
           showBack: true,
           onBack: _back,
-          canNext: true,
+          canNext: _sexValid && _spayedValid,
           onNext: _next,
-          onSkip: _next,
-          helperError: null,
+          helperError: (!_sexValid && _sexTouched)
+              ? "Sex is required"
+              : ((!_spayedValid && _spayTouched)
+                  ? "Please select spayed/neutered"
+                  : null),
           bg: bg,
           titleColor: titleColor,
           accent: accent,
           muted: muted,
-          field: UnderlineDropdownInput<String>(
-            label: "Sex",
-            value: sex,
-            lineColor: muted,
-            onChanged: (v) => setState(() => sex = v),
-            items: const [
-              DropdownMenuItem(value: "male", child: Text("Male")),
-              DropdownMenuItem(value: "female", child: Text("Female")),
-              DropdownMenuItem(
-                value: "unknown",
-                child: Text("Prefer not to say"),
-              ),
-            ],
+          field: SexAndSpayField(
+            sexValue: sex,
+            onSexChanged: (v) => setState(() {
+              _sexTouched = true;
+              sex = v;
+            }),
+            spayedValue: spayedNeutered,
+            onSpayedChanged: (v) => setState(() {
+              _spayTouched = true;
+              spayedNeutered = v;
+            }),
+            muted: muted,
           ),
         ),
 
-        // 4) breed (optional text)
+        // 4) breed (required)
         OnboardingStepScaffold(
           title: "What breed is $_petLabel?",
           showBack: true,
           onBack: _back,
-          canNext: true,
+          canNext: _breedValid,
           onNext: _next,
-          onSkip: _next,
-          helperError: null,
+          helperError: (_breedTouched && !_breedValid) ? "Breed is required" : null,
           bg: bg,
           titleColor: titleColor,
           accent: accent,
@@ -269,60 +295,60 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
             controller: breed,
             label: "Breed",
             lineColor: muted,
-            onChanged: (_) => setState(() {}),
+            onChanged: (_) => setState(() => _breedTouched = true),
           ),
         ),
 
-        // 5) age (optional scrolling wheel)
+        // 5) age OR birthdate
         OnboardingStepScaffold(
           title: "How old is $_petLabel?",
           showBack: true,
           onBack: _back,
-          canNext: true,
+          canNext: _ageModeValid && _ageValueValid,
           onNext: _next,
-          onSkip: _next,
-          helperError: null,
+          helperError: (!_ageModeValid && _ageModeTouched)
+              ? "Please choose Age or Birthdate"
+              : ((!_ageValueValid && _ageValueTouched)
+                  ? (ageMode == AgeInputMode.birthdate
+                      ? "Birthdate is required"
+                      : "Age is required")
+                  : null),
           bg: bg,
           titleColor: titleColor,
           accent: accent,
           muted: muted,
-          field: AgeWheelPicker(
-            value: ageYears,
-            lineColor: muted,
-            onChanged: (v) => setState(() => ageYears = v),
-          ),
-        ),
-
-        // 6) birth date (optional date picker)
-        OnboardingStepScaffold(
-          title: "Birthdate of $_petLabel",
-          showBack: true,
-          onBack: _back,
-          canNext: true,
-          onNext: _next, // <-- go to "All set" page
-          onSkip: _next, // <-- skip birthdate, still go to "All set"
-          helperError: null,
-          bg: bg,
-          titleColor: titleColor,
-          accent: accent,
-          muted: muted,
-          field: _BirthDateField(
+          field: AgeOrBirthdateField(
+            mode: ageMode,
             muted: muted,
-            selected: birthDate,
-            onPick: (d) => setState(() => birthDate = d),
+            ageYears: ageYears,
+            birthDate: birthDate,
+            onModeChanged: (m) => setState(() {
+              _ageModeTouched = true;
+              ageMode = m;
+              // clear the other input for clarity
+              if (ageMode == AgeInputMode.age) {
+                birthDate = null;
+              }
+              _ageValueTouched = false;
+            }),
+            onAgeChanged: (v) => setState(() {
+              _ageValueTouched = true;
+              ageYears = v;
+            }),
+            onBirthPick: (d) => setState(() {
+              _ageValueTouched = true;
+              birthDate = d;
+            }),
           ),
         ),
 
-        // 7) final "All Set" page
+        // 6) final page
         OnboardingStepScaffold(
           title: "You’re All Set!\nReady to take your\nfirst assessment?",
           showBack: true,
           onBack: _back,
-
           canNext: false,
           onNext: null,
-          onSkip: null,
-
           helperError: _finalError,
           bg: bg,
           titleColor: titleColor,
@@ -331,9 +357,8 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           field: Column(
             children: [
               GestureDetector(
-                onTap: _savingFinal
-                    ? null
-                    : () => _finalizeAndGo('/assessment'),
+                onTap:
+                    _savingFinal ? null : () => _finalizeAndGo('/assessment'),
                 child: Text(
                   _savingFinal ? "saving..." : "start first assessment",
                   style: const TextStyle(
@@ -358,6 +383,136 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+// ---------------------------
+// Specific widgets
+// ---------------------------
+
+class SexAndSpayField extends StatelessWidget {
+  final String? sexValue;
+  final ValueChanged<String?> onSexChanged;
+
+  final bool? spayedValue;
+  final ValueChanged<bool?> onSpayedChanged;
+
+  final Color muted;
+
+  const SexAndSpayField({
+    super.key,
+    required this.sexValue,
+    required this.onSexChanged,
+    required this.spayedValue,
+    required this.onSpayedChanged,
+    required this.muted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        UnderlineDropdownInput<String>(
+          label: "Sex",
+          value: sexValue,
+          lineColor: muted,
+          onChanged: onSexChanged,
+          items: const [
+            DropdownMenuItem(value: "male", child: Text("Male")),
+            DropdownMenuItem(value: "female", child: Text("Female")),
+            DropdownMenuItem(value: "unknown", child: Text("Prefer not to say")),
+          ],
+        ),
+        const SizedBox(height: 18),
+        Text("Spayed / Neutered",
+            style: TextStyle(color: muted, fontSize: 12)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 10,
+          children: [
+            ChoiceChip(
+              label: const Text("Yes"),
+              selected: spayedValue == true,
+              onSelected: (_) => onSpayedChanged(true),
+            ),
+            ChoiceChip(
+              label: const Text("No"),
+              selected: spayedValue == false,
+              onSelected: (_) => onSpayedChanged(false),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class AgeOrBirthdateField extends StatelessWidget {
+  final AgeInputMode? mode;
+  final ValueChanged<AgeInputMode> onModeChanged;
+
+  final int ageYears;
+  final ValueChanged<int> onAgeChanged;
+
+  final DateTime? birthDate;
+  final ValueChanged<DateTime?> onBirthPick;
+
+  final Color muted;
+
+  const AgeOrBirthdateField({
+    super.key,
+    required this.mode,
+    required this.onModeChanged,
+    required this.ageYears,
+    required this.onAgeChanged,
+    required this.birthDate,
+    required this.onBirthPick,
+    required this.muted,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // user must choose first
+        Wrap(
+          spacing: 10,
+          children: [
+            ChoiceChip(
+              label: const Text("Enter age"),
+              selected: mode == AgeInputMode.age,
+              onSelected: (_) => onModeChanged(AgeInputMode.age),
+            ),
+            ChoiceChip(
+              label: const Text("Pick birthdate"),
+              selected: mode == AgeInputMode.birthdate,
+              onSelected: (_) => onModeChanged(AgeInputMode.birthdate),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        if (mode == null)
+          Text(
+            "Choose one option above.",
+            style: TextStyle(color: muted, fontSize: 12),
+          )
+        else if (mode == AgeInputMode.age)
+          AgeWheelPicker(
+            value: ageYears,
+            lineColor: muted,
+            onChanged: onAgeChanged,
+          )
+        else
+          _BirthDateField(
+            muted: muted,
+            selected: birthDate,
+            onPick: onBirthPick,
+          ),
       ],
     );
   }
@@ -395,7 +550,7 @@ class AgeWheelPicker extends StatelessWidget {
           scrollController: FixedExtentScrollController(initialItem: value),
           itemExtent: 34,
           onSelectedItemChanged: onChanged,
-          children: List.generate(21, (i) => Center(child: Text("$i"))),
+          children: List.generate(41, (i) => Center(child: Text("$i"))),
         ),
       ),
     );
