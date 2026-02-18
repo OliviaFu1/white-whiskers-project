@@ -50,7 +50,26 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
       final access = await TokenStore.readAccess();
       if (access == null) throw "No access token found.";
 
+      // 1) save owner name
       await AuthApi.updateMe(accessToken: access, name: ownerName.text.trim());
+
+      // 2) create pet
+      final petBody = <String, dynamic>{
+        "name": petName.text.trim(),
+        // species is required by your model; ensure you send something
+        "species": (species ?? "dog"),
+        // sex has a default in backend, but it's fine to send
+        "sex": (sex ?? "unknown"),
+        // optional fields: only include if non-empty
+        if (breed.text.trim().isNotEmpty) "breed_text": breed.text.trim(),
+        if (birthDate != null)
+          "birthdate": birthDate!
+              .toIso8601String()
+              .split('T')
+              .first, // YYYY-MM-DD
+      };
+
+      await AuthApi.createPet(accessToken: access, body: petBody);
 
       if (!mounted) return;
       Navigator.pushReplacementNamed(context, route);
@@ -129,7 +148,7 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
         // 1) pet name (required)
         OnboardingStepScaffold(
           title:
-              "Hello ${ownerName.text.trim().isEmpty ? "" : ownerName.text.trim() + "!"}\nWhat’s your pet’s name?",
+              "Hello ${ownerName.text.trim().isEmpty ? "" : "${ownerName.text.trim()}!"}\nWhat’s your pet’s name?",
           showBack: true,
           onBack: _back,
           canNext: _petValid,
@@ -150,7 +169,33 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
           ),
         ),
 
-        // 2) sex (optional)
+        // 2) species (required)
+        OnboardingStepScaffold(
+          title: "What species is $_petLabel?",
+          showBack: true,
+          onBack: _back,
+          canNext: true,
+          onNext: _next,
+          onSkip: null,
+          helperError: null,
+          bg: bg,
+          titleColor: titleColor,
+          accent: accent,
+          muted: muted,
+          field: UnderlineDropdownInput<String>(
+            label: "Species",
+            value: species,
+            lineColor: muted,
+            onChanged: (v) => setState(() => species = v),
+            items: const [
+              DropdownMenuItem(value: "dog", child: Text("Dog")),
+              DropdownMenuItem(value: "cat", child: Text("Cat")),
+              DropdownMenuItem(value: "other", child: Text("Other")),
+            ],
+          ),
+        ),
+
+        // 3) sex (optional)
         OnboardingStepScaffold(
           title: "Great!\nWhat’s $_petLabel’s sex?",
           showBack: true,
@@ -175,32 +220,6 @@ class _OnboardingFlowState extends State<OnboardingFlow> {
                 value: "unknown",
                 child: Text("Prefer not to say"),
               ),
-            ],
-          ),
-        ),
-
-        // 3) species (optional)
-        OnboardingStepScaffold(
-          title: "What species is $_petLabel?",
-          showBack: true,
-          onBack: _back,
-          canNext: true,
-          onNext: _next,
-          onSkip: _next,
-          helperError: null,
-          bg: bg,
-          titleColor: titleColor,
-          accent: accent,
-          muted: muted,
-          field: UnderlineDropdownInput<String>(
-            label: "Species",
-            value: species,
-            lineColor: muted,
-            onChanged: (v) => setState(() => species = v),
-            items: const [
-              DropdownMenuItem(value: "dog", child: Text("Dog")),
-              DropdownMenuItem(value: "cat", child: Text("Cat")),
-              DropdownMenuItem(value: "other", child: Text("Other")),
             ],
           ),
         ),

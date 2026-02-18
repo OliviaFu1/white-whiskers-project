@@ -32,10 +32,7 @@ class AuthApi {
     final res = await http.post(
       _u("/api/accounts/token/"),
       headers: {"Content-Type": "application/json"},
-      body: jsonEncode({
-        "email": email,
-        "password": password,
-      }),
+      body: jsonEncode({"email": email, "password": password}),
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
@@ -45,9 +42,7 @@ class AuthApi {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-  static Future<Map<String, dynamic>> me({
-    required String accessToken,
-  }) async {
+  static Future<Map<String, dynamic>> me({required String accessToken}) async {
     final res = await http.get(
       _u("/api/accounts/me/"),
       headers: {
@@ -63,7 +58,7 @@ class AuthApi {
     return jsonDecode(res.body) as Map<String, dynamic>;
   }
 
-    static Future<Map<String, dynamic>> updateMe({
+  static Future<Map<String, dynamic>> updateMe({
     required String accessToken,
     String? name,
     String? photoUrl,
@@ -82,10 +77,59 @@ class AuthApi {
     );
 
     if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw _extractError(res.body) ?? "Failed to update profile (${res.statusCode})";
+      throw _extractError(res.body) ??
+          "Failed to update profile (${res.statusCode})";
     }
 
     return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<Map<String, dynamic>> createPet({
+    required String accessToken,
+    required Map<String, dynamic> body,
+  }) async {
+    final res = await http.post(
+      _u("/api/pets/"),
+      headers: {
+        "Authorization": "Bearer $accessToken",
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode(body),
+    );
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw _extractError(res.body) ??
+          "Failed to create pet (${res.statusCode})";
+    }
+
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  static Future<List<Map<String, dynamic>>> listPets({
+    required String accessToken,
+  }) async {
+    final res = await http.get(
+      _u("/api/pets/"),
+      headers: {
+        "Authorization": "Bearer $accessToken",
+        "Content-Type": "application/json",
+      },
+    );
+
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      throw _extractError(res.body) ??
+          "Failed to load pets (${res.statusCode})";
+    }
+
+    final decoded = jsonDecode(res.body);
+
+    if (decoded is List) {
+      return decoded.cast<Map<String, dynamic>>();
+    }
+    if (decoded is Map && decoded["results"] is List) {
+      return (decoded["results"] as List).cast<Map<String, dynamic>>();
+    }
+    throw "Unexpected pets response format";
   }
 
   static String? _extractError(String body) {

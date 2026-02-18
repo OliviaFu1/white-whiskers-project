@@ -17,22 +17,24 @@ class _MypetPageState extends State<MypetPage> {
 
   bool isLoading = true;
   String? errorText;
-  Map<String, dynamic>? me;
+
+  List<Map<String, dynamic>> pets = [];
 
   @override
   void initState() {
     super.initState();
-    _loadMe();
+    _loadPets();
   }
 
-  Future<void> _loadMe() async {
+  Future<void> _loadPets() async {
     try {
       final access = await TokenStore.readAccess();
       if (access == null) throw "No access token found.";
-      final data = await AuthApi.me(accessToken: access);
+
+      final petList = await AuthApi.listPets(accessToken: access);
 
       setState(() {
-        me = data;
+        pets = petList;
         isLoading = false;
       });
     } catch (e) {
@@ -57,13 +59,20 @@ class _MypetPageState extends State<MypetPage> {
         child: isLoading
             ? const Center(child: CircularProgressIndicator())
             : errorText != null
-                ? Center(child: Text(errorText!, style: const TextStyle(color: Colors.red)))
-                : _content(),
+            ? Center(
+                child: Text(
+                  errorText!,
+                  style: const TextStyle(color: Colors.red),
+                ),
+              )
+            : _content(),
       ),
     );
   }
 
   Widget _content() {
+    final pet = pets.isNotEmpty ? pets.first : null;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22.0),
       child: Column(
@@ -71,11 +80,10 @@ class _MypetPageState extends State<MypetPage> {
         children: [
           const SizedBox(height: 12),
 
-          // top icons (profile / trophy)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _circleIcon(Icons.person_outline, onTap: _logout), // temp: logout here
+              _circleIcon(Icons.person_outline, onTap: _logout), // temp logout
               _circleIcon(Icons.emoji_events_outlined, onTap: () {}),
             ],
           ),
@@ -84,18 +92,16 @@ class _MypetPageState extends State<MypetPage> {
 
           const Text(
             "My pets",
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w700, color: titleColor),
+            style: TextStyle(
+              fontSize: 30,
+              fontWeight: FontWeight.w700,
+              color: titleColor,
+            ),
           ),
 
           const SizedBox(height: 14),
 
-          // Pet card (placeholder data for now)
-          _petCard(
-            petName: "Sausage",
-            breed: "Dachshund",
-            sex: "Female",
-            ageText: "8 months year old",
-          ),
+          pet == null ? _emptyPetCard() : _petCard(pet),
 
           const SizedBox(height: 14),
 
@@ -105,10 +111,13 @@ class _MypetPageState extends State<MypetPage> {
 
           const Text(
             "More actions",
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: accent),
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: accent,
+            ),
           ),
-
-          const SizedBox(height: 10),
+          const SizedBox(height: 5),
 
           _actionRow(Icons.add_circle_outline, "Add a new pet", onTap: () {}),
           _actionRow(Icons.group_outlined, "Add a family member", onTap: () {}),
@@ -116,17 +125,16 @@ class _MypetPageState extends State<MypetPage> {
 
           const Spacer(),
 
-          // bottom nav (placeholder)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: const [
-              _BottomIcon(Icons.calendar_month_outlined),
-              _BottomIcon(Icons.receipt_long_outlined),
-              _BottomIcon(Icons.pets_outlined),
+              _BottomIcon(Icons.calendar_month_outlined, selected: false),
+              _BottomIcon(Icons.receipt_long_outlined, selected: false),
+              _BottomIcon(Icons.pets_outlined, selected: true), // current page
             ],
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 5),
         ],
       ),
     );
@@ -148,19 +156,47 @@ class _MypetPageState extends State<MypetPage> {
     );
   }
 
-  Widget _petCard({
-    required String petName,
-    required String breed,
-    required String sex,
-    required String ageText,
-  }) {
+  BoxDecoration _cardDecoration() {
+    return BoxDecoration(
+      color: Colors.white.withValues(),
+      borderRadius: BorderRadius.circular(18),
+      boxShadow: const [
+        BoxShadow(
+          blurRadius: 12,
+          offset: Offset(0, 6),
+          color: Color(0x22000000),
+        ),
+      ],
+    );
+  }
+
+  Widget _emptyPetCard() {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(blurRadius: 12, offset: Offset(0, 6), color: Color(0x22000000))],
+      decoration: _cardDecoration(),
+      child: const Text(
+        "No pets yet. Add a new pet to get started.",
+        style: TextStyle(color: muted),
       ),
+    );
+  }
+
+  Widget _petCard(Map<String, dynamic> pet) {
+    final petName = (pet["name"] ?? "").toString();
+    final breed = (pet["breed_text"] ?? "").toString().trim();
+    final species = (pet["species"] ?? "").toString().trim();
+    final sex = (pet["sex"] ?? "").toString().trim();
+
+    // Build a simple 2–3 line info block without extra formatting
+    final infoLines = <String>[
+      if (breed.isNotEmpty) breed,
+      if (species.isNotEmpty) species,
+      if (sex.isNotEmpty) sex,
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: _cardDecoration(),
       child: Row(
         children: [
           Container(
@@ -177,17 +213,55 @@ class _MypetPageState extends State<MypetPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(petName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: muted)),
+                Text(
+                  petName,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: muted,
+                  ),
+                ),
                 const SizedBox(height: 6),
-                Text("$breed\n$sex\n$ageText", style: const TextStyle(fontSize: 12, color: muted)),
+                if (infoLines.isNotEmpty)
+                  Text(
+                    infoLines.join("\n"),
+                    style: const TextStyle(fontSize: 12, color: muted),
+                  ),
+
                 const SizedBox(height: 10),
-                const Text("Favorite Foods", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: muted)),
-                const Text("Chicken · Turkey Treats · Carrots", style: TextStyle(fontSize: 12, color: muted)),
+
+                const Text(
+                  "Favorite Foods",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: muted,
+                  ),
+                ),
+                const Text("—", style: TextStyle(fontSize: 12, color: muted)),
+
                 const SizedBox(height: 8),
-                const Text("Favorite Activities", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: muted)),
-                const Text("Scent Games · Puzzle Toys · Sunbathing", style: TextStyle(fontSize: 12, color: muted)),
+
+                const Text(
+                  "Favorite Activities",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: muted,
+                  ),
+                ),
+                const Text("—", style: TextStyle(fontSize: 12, color: muted)),
+
                 const SizedBox(height: 8),
-                const Text("Medication history", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: muted)),
+
+                const Text(
+                  "Medication history",
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: muted,
+                  ),
+                ),
               ],
             ),
           ),
@@ -199,21 +273,37 @@ class _MypetPageState extends State<MypetPage> {
   Widget _historyCard() {
     return Container(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(),
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(blurRadius: 12, offset: Offset(0, 6), color: Color(0x22000000))],
-      ),
+      decoration: _cardDecoration(),
       child: Row(
         children: const [
           SizedBox(width: 4),
-          Text("Feb 9th\n2026", style: TextStyle(color: muted)),
+          Text("—", style: TextStyle(color: muted)),
           Spacer(),
-          Text("heart ", style: TextStyle(color: muted, fontWeight: FontWeight.w600)),
-          Text("4", style: TextStyle(color: Colors.red, fontSize: 34, fontWeight: FontWeight.w800)),
+          Text(
+            "heart ",
+            style: TextStyle(color: muted, fontWeight: FontWeight.w600),
+          ),
+          Text(
+            "—",
+            style: TextStyle(
+              color: muted,
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           SizedBox(width: 18),
-          Text("condition ", style: TextStyle(color: muted, fontWeight: FontWeight.w600)),
-          Text("9", style: TextStyle(color: Colors.teal, fontSize: 34, fontWeight: FontWeight.w800)),
+          Text(
+            "condition ",
+            style: TextStyle(color: muted, fontWeight: FontWeight.w600),
+          ),
+          Text(
+            "—",
+            style: TextStyle(
+              color: muted,
+              fontSize: 34,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
           SizedBox(width: 6),
           Icon(Icons.chevron_right, color: muted),
         ],
@@ -221,11 +311,18 @@ class _MypetPageState extends State<MypetPage> {
     );
   }
 
-  Widget _actionRow(IconData icon, String label, {required VoidCallback onTap}) {
+  Widget _actionRow(
+    IconData icon,
+    String label, {
+    required VoidCallback onTap,
+  }) {
     return ListTile(
+      dense: true,
+      visualDensity: const VisualDensity(vertical: -3),
       contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: muted),
-      title: Text(label, style: const TextStyle(color: muted)),
+      minLeadingWidth: 20,
+      leading: Icon(icon, size: 20, color: muted),
+      title: Text(label, style: const TextStyle(fontSize: 18, color: muted)),
       onTap: onTap,
     );
   }
@@ -233,18 +330,25 @@ class _MypetPageState extends State<MypetPage> {
 
 class _BottomIcon extends StatelessWidget {
   final IconData icon;
-  const _BottomIcon(this.icon);
+  final bool selected;
+  const _BottomIcon(this.icon, {required this.selected});
 
   @override
   Widget build(BuildContext context) {
+    const active = Color(0xFFD88442);
+    const inactive = Color(0xFF676767);
+
+    final border = selected ? active : inactive;
+    final iconColor = selected ? active : inactive;
+
     return Container(
       width: 54,
       height: 54,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: const Color(0xFF676767)),
+        border: Border.all(color: border, width: selected ? 2 : 1),
       ),
-      child: Icon(icon, color: const Color(0xFF676767)),
+      child: Icon(icon, color: iconColor),
     );
   }
 }
